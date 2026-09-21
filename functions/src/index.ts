@@ -13,6 +13,7 @@ import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
+import { stalTokensFrom, uniqueTokens } from './pushDelivery';
 
 initializeApp();
 const db = getFirestore();
@@ -38,7 +39,8 @@ export const sendNotificationPush = onDocumentCreated(
     if (!notification?.userId) return;
 
     const userSnap = await db.doc(`users/${notification.userId}`).get();
-    const tokens: string[] = userSnap.get('fcmTokens') ?? [];
+    // Deduplicated: FCM rejects a batch containing the same token twice.
+    const tokens = uniqueTokens(userSnap.get('fcmTokens'));
 
     if (tokens.length === 0) {
       logger.debug(`No FCM tokens registered for user ${notification.userId}`);
@@ -58,17 +60,9 @@ export const sendNotificationPush = onDocumentCreated(
       },
     });
 
-    // Prune tokens FCM has permanently rejected.
-    const stale: string[] = [];
-    response.responses.forEach((result, index) => {
-      const code = result.error?.code;
-      if (
-        code === 'messaging/registration-token-not-registered' ||
-        code === 'messaging/invalid-registration-token'
-      ) {
-        stale.push(tokens[index]);
-      }
-    });
+    // Prune only permanently-rejected tokens. Transient failures (quota,
+    // internal errors) must not unsubscribe a working device.
+    const stale = stalTokensFrom(tokens, response.responses);
 
     if (stale.length > 0) {
       await userSnap.ref.update({ fcmTokens: FieldValue.arrayRemove(...stale) });
@@ -91,10 +85,15 @@ export const expireStaleDonations = onSchedule('every 60 minutes', async () => {
   const now = Date.now();
   const openStatuses = ['created', 'matching', 'matched'];
 
+  // `where('expiryDate', '<', now)` already excludes documents missing the
+  // field — Firestore range filters skip them — so non-perishable donations
+  // are never swept. The orderBy makes that index requirement explicit.
   const snapshot = await db
     .collection('donations')
     .where('status', 'in', openStatuses)
     .where('expiryDate', '<', now)
+    .orderBy('expiryDate')
+    .limit(400)
     .get();
 
   if (snapshot.empty) return;
@@ -131,20 +130,38 @@ export const pickupReminders = onSchedule('every 30 minutes', async () => {
     .where('scheduledFor', '<=', horizon)
     .get();
 
-  const writes = snapshot.docs
-    .filter((doc) => doc.get('volunteerId'))
-    .map((doc) =>
-      db.collection('notifications').add({
-        userId: doc.get('volunteerId'),
-        title: 'Pickup starting soon',
-        body: `"${doc.get('title')}" is scheduled for pickup within the hour.`,
-        kind: 'pickup',
-        link: `/app/tasks/${doc.id}`,
-        read: false,
-        createdAt: Date.now(),
-      }),
-    );
+  // Idempotency matters here: this runs every 30 minutes but looks an hour
+  // ahead, so without a marker every task inside the window would be reminded
+  // about twice. A transaction claims the flag and writes the notification
+  // together, so overlapping or retried invocations cannot both send.
+  const sent = await Promise.all(
+    snapshot.docs.map(async (doc) => {
+      const volunteerId = doc.get('volunteerId');
+      if (!volunteerId) return false;
 
-  await Promise.all(writes);
-  if (writes.length) logger.info(`Sent ${writes.length} pickup reminder(s)`);
+      return db.runTransaction(async (tx) => {
+        const fresh = await tx.get(doc.ref);
+        if (!fresh.exists || fresh.get('pickupReminderSentAt')) return false;
+        // Re-read status inside the transaction: it may have advanced since
+        // the query, in which case the reminder is no longer relevant.
+        if (!['accepted', 'going_to_pickup'].includes(fresh.get('status'))) return false;
+
+        tx.update(doc.ref, { pickupReminderSentAt: now });
+        tx.create(db.collection('notifications').doc(), {
+          userId: volunteerId,
+          title: 'Pickup starting soon',
+          body: `"${fresh.get('title')}" is scheduled for pickup within the hour.`,
+          kind: 'pickup',
+          link: `/app/tasks/${doc.id}`,
+          donationId: fresh.get('donationId') ?? null,
+          read: false,
+          createdAt: now,
+        });
+        return true;
+      });
+    }),
+  );
+
+  const count = sent.filter(Boolean).length;
+  if (count) logger.info(`Sent ${count} pickup reminder(s)`);
 });

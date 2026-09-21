@@ -147,6 +147,14 @@ export interface Donation {
   matchId?: string;
   matchedRequestId?: string;
   matchedReceiverId?: string;
+  /**
+   * The volunteer currently running this donation's delivery.
+   *
+   * Duplicated from the task because Firestore rules cannot join across
+   * documents cheaply: without it, scoping donation writes to the assigned
+   * volunteer would require every rule evaluation to fetch the task.
+   */
+  assignedVolunteerId?: string;
   matchedReceiverName?: string;
   matchScore?: number;
   taskId?: string;
@@ -256,6 +264,15 @@ export interface AppNotification {
   kind: NotificationKind;
   read: boolean;
   link?: string;
+  /**
+   * The donation this notification concerns, when it concerns one.
+   *
+   * Security rules use it to confirm that the sender and the recipient are
+   * both parties to that donation — otherwise any signed-in user could forge
+   * a notification to any other.
+   */
+  donationId?: string;
+  readAt?: number;
   createdAt: number;
 }
 

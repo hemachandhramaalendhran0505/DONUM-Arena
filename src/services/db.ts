@@ -66,6 +66,43 @@ export async function updateDocById<T extends Identified>(
   await updateDoc(fsDoc(db, name, id), { ...patch, updatedAt: Date.now() } as never);
 }
 
+/**
+ * Atomically append values to an array field, without duplicates.
+ *
+ * This exists because read-modify-write loses data: two devices enabling push
+ * at the same time both read `[]`, both write their own single token, and the
+ * second write erases the first. Firestore's arrayUnion resolves that
+ * server-side, and the local adapter mirrors the same de-duplicating semantics
+ * so behaviour does not change between backends.
+ */
+export async function appendToArrayField<T extends Identified>(
+  name: CollectionName,
+  id: string,
+  field: keyof T & string,
+  values: string[],
+): Promise<void> {
+  if (!values.length) return;
+
+  if (!isFirebaseConfigured) {
+    ensureSeeded();
+    const current = localStore.get<T>(name, id);
+    if (!current) return;
+    const existing = (current[field] as unknown as string[] | undefined) ?? [];
+    const merged = [...existing];
+    for (const value of values) if (!merged.includes(value)) merged.push(value);
+    if (merged.length === existing.length) return; // nothing new — avoid a write
+    localStore.update<T>(name, id, { [field]: merged } as unknown as Partial<T>);
+    return;
+  }
+
+  const { doc: fsDoc, updateDoc, arrayUnion } = await import('firebase/firestore');
+  const db = await getDb();
+  await updateDoc(fsDoc(db, name, id), {
+    [field]: arrayUnion(...values),
+    updatedAt: Date.now(),
+  } as never);
+}
+
 export async function getDocById<T extends Identified>(
   name: CollectionName,
   id: string,

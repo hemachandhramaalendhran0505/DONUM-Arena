@@ -206,16 +206,38 @@ Rounded cards, soft shadows, clear status badges, Plus Jakarta Sans, and mobile-
 ## Testing
 
 ```bash
-npm test            # 27 unit, service-layer and architecture tests
+npm test            # 111 unit, service, security and architecture tests
 npm run test:smoke  # 8 runtime smoke tests (mounts the real app)
 npm run test:all    # everything
 npm run typecheck   # tsc -b, zero errors
 npm run build       # production build
 ```
 
-**Unit & integration** (`vitest.config.ts`) — matching engine maths against every documented scoring band, derived donation urgency, an architecture guard that fails the build if the storage layer imports a feature, and a full lifecycle test driving the real services: donation created → auto-matched → accepted → delivery task → all seven volunteer transitions → completed, asserting donation, request, task and notification state stay consistent.
+**Unit & integration** (`vitest.config.ts`) — 111 tests covering the matching
+engine against every documented scoring band, the three lifecycle state
+machines (including the illegal transitions they must *reject*), all six browse
+filters asserted on the resulting data rather than on rendered controls,
+derived urgency thresholds, FCM token persistence under concurrent
+registration, upload validation, Cloud Function push fan-out and token pruning,
+coordinate hardening, a static audit of every Firestore rule, and an
+architecture guard that fails the build if the storage layer imports a feature.
+A full lifecycle test drives the real services end to end: donation created →
+auto-matched → accepted → delivery task → all seven volunteer transitions →
+completed, asserting donation, request, task and notification state stay
+consistent.
 
-**Runtime smoke** (`vitest.smoke.config.ts`) — mounts the actual application in jsdom, signs in as each of the four roles, walks every major route and **fails on any console error**, plus asserts all six browse filters are present. This caught three real defects during development: a same-tab session-notification bug that bounced users back to sign-in, form labels not associated with their inputs, and FCM device tokens being fetched then silently discarded so push could never be delivered.
+**Runtime smoke** (`vitest.smoke.config.ts`) — mounts the actual application in
+jsdom, signs in as each of the four roles, walks every major route and **fails
+on any console error**.
+
+Testing has caught eight real defects in this codebase so far, each fixed and
+pinned by a regression test: a same-tab session bug that bounced users back to
+sign-in; form labels not associated with their inputs; FCM tokens fetched then
+discarded so push could never be delivered; multi-device token loss from a
+read-modify-write; unguarded lifecycle writes that let a donation skip the
+chain of custody; four Firestore authorisation holes; duplicate pickup
+reminders from a non-idempotent scheduled function; and NaN distances that made
+donations silently vanish from filters.
 
 ---
 
@@ -234,8 +256,40 @@ maintenance that cannot depend on a browser tab being open:
 cd functions && npm install && npm run deploy
 ```
 
-Device tokens are stored as `users/{id}.fcmTokens[]` — an array, so a user
-signed in on both phone and laptop is reached on both.
+Device tokens are stored as `users/{id}.fcmTokens[]` — an array, appended with
+`arrayUnion`, so a user signed in on both phone and laptop is reached on both
+and neither device can clobber the other's registration.
+
+`pickupReminders` is idempotent: it runs every 30 minutes but looks an hour
+ahead, so it claims a `pickupReminderSentAt` marker inside the same transaction
+that writes the notification. Without that, every volunteer would be reminded
+twice.
+
+---
+
+## Verified, and not verified
+
+Being precise about this matters more than a green checkmark:
+
+| Area | How it is verified |
+| --- | --- |
+| Matching, urgency, filters, lifecycles, geo, uploads | Unit tests against real data |
+| Service integration | Lifecycle test driving the real services over the local store |
+| App boots and every route renders | Runtime smoke tests, failing on any console error |
+| Firestore rules | **Static analysis only** — see below |
+| Cloud Functions | Pure logic unit-tested; triggers typecheck and compile |
+| Firebase backend end to end | **Not verified here** — needs project credentials |
+
+`src/services/securityRules.test.ts` parses `firestore.rules` and asserts the
+specific holes found in the audit stay closed. That is not the same as
+behavioural verification: the proper tool is `@firebase/rules-unit-testing`
+against the emulator, which needs firebase v12 (this project is on v10) and a
+JVM, neither available in this environment. Before going live, run the rules
+against the emulator suite.
+
+Equally, the Cloud Functions compile and their logic is tested, but they have
+not been executed against a live project. `firebase emulators:start` will
+exercise them once credentials exist.
 
 ---
 

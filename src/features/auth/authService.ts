@@ -8,7 +8,14 @@
 import { isFirebaseConfigured } from '@/firebase/config';
 import { getFirebaseAuth } from '@/firebase/app';
 import type { SignUpPayload, UserProfile, UserRole } from '@/types';
-import { createDoc, ensureSeeded, getDocById, updateDocById, uid } from '@/services/db';
+import {
+  appendToArrayField,
+  createDoc,
+  ensureSeeded,
+  getDocById,
+  updateDocById,
+  uid,
+} from '@/services/db';
 import { localStore } from '@/services/localStore';
 import type { StoredCredential } from '@/services/seed';
 
@@ -177,6 +184,19 @@ export async function updateUserProfile(
   patch: Partial<UserProfile>,
 ): Promise<void> {
   await updateDocById<UserProfile>('users', userId, patch);
+}
+
+/**
+ * Register an FCM device token against a user.
+ *
+ * Appended atomically: one account is routinely signed in on a phone and a
+ * laptop, and a read-modify-write would let whichever device registered last
+ * silently delete the other's token — the account would look push-enabled in
+ * the UI while one device stopped receiving anything. Re-registering an
+ * existing token is a no-op, so this is safe to call on every sign-in.
+ */
+export async function registerDeviceToken(userId: string, token: string): Promise<void> {
+  await appendToArrayField<UserProfile>('users', userId, 'fcmTokens', [token]);
 }
 
 // --- session ---------------------------------------------------------------

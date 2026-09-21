@@ -26,7 +26,7 @@ import { useToast } from '@/context/ToastContext';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { createDonation } from '@/features/donations/donationService';
 import { previewMatchesForDonation } from '@/features/matching/matchService';
-import { uploadImages } from '@/firebase/storage';
+import { partitionImages, uploadImages } from '@/firebase/storage';
 import type { Donation, DonationCategory, DonationCondition, FoodDetails } from '@/types';
 import {
   CATEGORY_EMOJI,
@@ -90,7 +90,15 @@ export function AddDonationPage() {
 
   const addFiles = (list: FileList | null) => {
     if (!list) return;
-    const next = Array.from(list).slice(0, 5 - files.length);
+    // `accept="image/*"` is only a hint — validate before previewing so an
+    // oversized or non-image file is refused here with a clear reason, rather
+    // than failing opaquely against Storage rules after submit.
+    const { accepted, errors } = partitionImages(Array.from(list));
+    errors.forEach((message) => toast(message, 'error'));
+    const next = accepted.slice(0, 5 - files.length);
+    if (accepted.length > next.length) {
+      toast('You can attach up to 5 images.', 'info');
+    }
     setFiles((prev) => [...prev, ...next]);
     setPreviews((prev) => [...prev, ...next.map((f) => URL.createObjectURL(f))]);
   };

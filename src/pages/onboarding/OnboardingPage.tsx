@@ -31,6 +31,7 @@ import { useToast } from '@/context/ToastContext';
 import { AuthError } from '@/features/auth/authService';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { enablePush } from '@/firebase/messaging';
+import { registerDeviceToken } from '@/features/auth/authService';
 import type { UserRole } from '@/types';
 import { VEHICLE_LABEL } from '@/utils/labels';
 import { cn } from '@/utils/cn';
@@ -154,10 +155,10 @@ export function OnboardingPage() {
     }
     // Request push alongside location, and persist the device token so the
     // backend can actually reach this device later.
-    let fcmTokens: string[] | undefined;
+    let deviceToken: string | undefined;
     if (withLocation) {
       const push = await enablePush();
-      if (push.token) fcmTokens = [push.token];
+      deviceToken = push.token ?? undefined;
     }
 
     await updateProfile({
@@ -165,8 +166,13 @@ export function OnboardingPage() {
       longitude: position?.longitude ?? 0,
       locationPermission: withLocation,
       onboardingComplete: true,
-      ...(fcmTokens && { fcmTokens }),
     });
+
+    // Appended separately and atomically — a profile patch would overwrite any
+    // token this account already registered on another device.
+    if (deviceToken && user) {
+      await registerDeviceToken(user.id, deviceToken);
+    }
     setLoading(false);
     toast('You’re all set. Welcome to DONUM.');
     navigate('/app');

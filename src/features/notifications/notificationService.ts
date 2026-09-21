@@ -9,6 +9,8 @@ export interface NotifyInput {
   body: string;
   kind: NotificationKind;
   link?: string;
+  /** The donation this concerns — security rules use it to authorise the write. */
+  donationId?: string;
 }
 
 /**

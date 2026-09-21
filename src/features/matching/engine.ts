@@ -138,7 +138,8 @@ const CATEGORY_LABELS: Record<DonationCategory, string> = {
 function buildReasons(b: Omit<MatchScoreBreakdown, 'explanation' | 'reasons'>, urgency: Urgency) {
   const reasons: string[] = [];
 
-  if (b.distanceScore >= 0.8) reasons.push(`only ${b.distanceKm.toFixed(1)} km away`);
+  if (b.distanceKm < 0) reasons.push('at an unconfirmed location');
+  else if (b.distanceScore >= 0.8) reasons.push(`only ${b.distanceKm.toFixed(1)} km away`);
   else if (b.distanceScore >= 0.6) reasons.push(`a short ${b.distanceKm.toFixed(1)} km trip`);
   else reasons.push(`${b.distanceKm.toFixed(1)} km away`);
 
@@ -212,7 +213,9 @@ export function scoreMatch(
     categoryScore: round(cScore),
     quantityScore: round(qScore),
     expiryScore: round(eScore),
-    distanceKm: Math.round(distanceKm * 10) / 10,
+    // Infinity means the coordinates were unusable; -1 signals "unknown"
+    // to the UI rather than rendering "Infinity km away".
+    distanceKm: Number.isFinite(distanceKm) ? Math.round(distanceKm * 10) / 10 : -1,
   };
 
   const { explanation, reasons } = explainMatch(partial, request.urgency);

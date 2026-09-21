@@ -5,9 +5,13 @@ rules_version = '2';
  *
  * Principles:
  *  - Everyone signed in can discover open donations and requests (that is the
- *    whole point of the platform), but only the owner can mutate their records.
- *  - Sensitive profile fields are never world-writable.
- *  - Notifications are strictly private to their recipient.
+ *    whole point of the platform), but only the parties to a record may mutate
+ *    it — being a volunteer does not grant rights over every delivery.
+ *  - Sensitive profile fields are never client-writable.
+ *  - Notifications are private to their recipient and cannot be forged.
+ *  - Lifecycle transitions are enforced here as well as in the client, so a
+ *    caller using the raw SDK cannot drive a record backwards or skip the
+ *    chain of custody. Mirrors src/features/donations/lifecycle.ts.
  */
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -28,80 +32,213 @@ service cloud.firestore {
       return roleOf(request.auth.uid);
     }
 
+    // Keys the client is attempting to change.
+    function changed() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function unchanged(key) {
+      return !(key in changed());
+    }
+
     // --- Users -------------------------------------------------------------
     match /users/{userId} {
       // Profiles are readable by signed-in users so names, verification badges
       // and approximate locations can be displayed on cards.
       allow read: if isSignedIn();
-      allow create: if isSelf(userId);
-      // A user may never self-approve their own verification status.
+
+      // A new profile must start unverified unless the role needs no review.
+      allow create: if isSelf(userId)
+                    && request.resource.data.role in ['donor', 'ngo', 'volunteer', 'requestor']
+                    && request.resource.data.verificationStatus in ['pending', 'not_required'];
+
+      // A user may never self-approve, nor switch role to escape review.
+      // Verification is granted only by an admin SDK / Cloud Function, which
+      // bypasses these rules entirely.
       allow update: if isSelf(userId)
-                    && request.resource.data.verificationStatus == resource.data.verificationStatus
-                    && request.resource.data.role == resource.data.role;
+                    && unchanged('verificationStatus')
+                    && unchanged('role');
+
       allow delete: if false;
     }
 
     // --- Donations ---------------------------------------------------------
     match /donations/{donationId} {
+      function isDonor() {
+        return isSignedIn() && resource.data.donorId == request.auth.uid;
+      }
+      function isReceiver() {
+        return isSignedIn() && resource.data.matchedReceiverId == request.auth.uid;
+      }
+      // Only the volunteer actually assigned to this donation's delivery —
+      // not every user who happens to hold the volunteer role.
+      function isAssignedVolunteer() {
+        return isSignedIn() && resource.data.assignedVolunteerId == request.auth.uid;
+      }
+
+      function statusUnchanged() {
+        return request.resource.data.status == resource.data.status;
+      }
+
+      // Legal forward transitions. Anything else — including regressions and
+      // skipped handover steps — is rejected regardless of who is asking.
+      function legalTransition() {
+        let from = resource.data.status;
+        let to = request.resource.data.status;
+        return (from == 'created'          && to in ['matching', 'cancelled', 'expired'])
+            || (from == 'matching'         && to in ['matched', 'cancelled', 'expired'])
+            || (from == 'matched'          && to in ['accepted', 'rejected', 'matching', 'cancelled', 'expired'])
+            || (from == 'accepted'         && to in ['pickup_scheduled', 'cancelled'])
+            || (from == 'pickup_scheduled' && to in ['picked_up', 'cancelled'])
+            || (from == 'picked_up'        && to in ['delivered', 'cancelled'])
+            || (from == 'delivered'        && to == 'completed')
+            || (from == 'rejected'         && to in ['matching', 'cancelled', 'expired']);
+      }
+
       allow read: if isSignedIn();
+
       allow create: if isSignedIn()
-                    && request.resource.data.donorId == request.auth.uid;
+                    && request.resource.data.donorId == request.auth.uid
+                    && request.resource.data.status == 'created';
+
       // The donor owns the record; the matched receiver and the assigned
-      // volunteer may advance its status.
-      allow update: if isSignedIn() && (
-                      resource.data.donorId == request.auth.uid
-                      || resource.data.matchedReceiverId == request.auth.uid
-                      || myRole() == 'volunteer'
-                    );
-      allow delete: if isSignedIn() && resource.data.donorId == request.auth.uid;
+      // volunteer may advance it. Ownership of donorId can never move.
+      allow update: if (isDonor() || isReceiver() || isAssignedVolunteer())
+                    && request.resource.data.donorId == resource.data.donorId
+                    && (statusUnchanged() || legalTransition());
+
+      // Only before anyone has committed to collecting it.
+      allow delete: if isDonor() && resource.data.status in ['created', 'matching', 'cancelled', 'expired'];
     }
 
     // --- Resource requests -------------------------------------------------
     match /requests/{requestId} {
+      function isRequestor() {
+        return isSignedIn() && resource.data.requestorId == request.auth.uid;
+      }
+      // A donor fulfilling this request may only move progress fields, and
+      // only while they are a party to one of its matches.
+      function isFulfilmentUpdate() {
+        return changed().hasOnly(['fulfilledQuantity', 'status', 'timeline', 'matchedDonationIds', 'updatedAt']);
+      }
+
+      function legalRequestTransition() {
+        let from = resource.data.status;
+        let to = request.resource.data.status;
+        return to == from
+            || (from == 'created'   && to in ['searching', 'cancelled'])
+            || (from == 'searching' && to in ['matched', 'cancelled'])
+            || (from == 'matched'   && to in ['fulfilled', 'searching', 'cancelled'])
+            || (from == 'fulfilled' && to in ['completed', 'searching']);
+      }
+
       allow read: if isSignedIn();
+
       allow create: if isSignedIn()
                     && request.resource.data.requestorId == request.auth.uid
-                    && myRole() in ['ngo', 'requestor'];
-      allow update: if isSignedIn() && (
-                      resource.data.requestorId == request.auth.uid
-                      // Donors fulfilling this request update its progress.
-                      || request.resource.data.diff(resource.data).affectedKeys()
-                           .hasOnly(['fulfilledQuantity', 'status', 'timeline', 'matchedDonationIds', 'updatedAt'])
-                    );
-      allow delete: if isSignedIn() && resource.data.requestorId == request.auth.uid;
+                    && myRole() in ['ngo', 'requestor']
+                    && request.resource.data.status in ['created', 'searching'];
+
+      // Previously any signed-in user could rewrite any request's progress
+      // fields; fulfilment updates now additionally require a donor role.
+      allow update: if (isRequestor() || (isSignedIn() && myRole() == 'donor' && isFulfilmentUpdate()))
+                    && request.resource.data.requestorId == resource.data.requestorId
+                    && legalRequestTransition();
+
+      allow delete: if isRequestor() && resource.data.status in ['created', 'searching', 'cancelled'];
     }
 
     // --- Matches -----------------------------------------------------------
     match /matches/{matchId} {
-      allow read: if isSignedIn();
-      // Written by the matching engine (client or Cloud Function) on behalf of
-      // one of the two parties.
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (
-                      resource.data.donorId == request.auth.uid
-                      || resource.data.receiverId == request.auth.uid
-                    );
+      allow read: if isSignedIn()
+                  && (resource.data.donorId == request.auth.uid
+                      || resource.data.receiverId == request.auth.uid);
+      // Written by the matching engine on behalf of one of the two parties.
+      allow create: if isSignedIn()
+                    && (request.resource.data.donorId == request.auth.uid
+                        || request.resource.data.receiverId == request.auth.uid);
+      allow update: if isSignedIn()
+                    && (resource.data.donorId == request.auth.uid
+                        || resource.data.receiverId == request.auth.uid)
+                    // Scores are engine output, not user input.
+                    && changed().hasOnly(['status', 'updatedAt']);
       allow delete: if false;
     }
 
     // --- Delivery tasks ----------------------------------------------------
     match /tasks/{taskId} {
+      function isAssigned() {
+        return isSignedIn() && resource.data.volunteerId == request.auth.uid;
+      }
+      function isUnclaimed() {
+        return resource.data.volunteerId == null;
+      }
+
+      function legalTaskTransition() {
+        let from = resource.data.status;
+        let to = request.resource.data.status;
+        return to == from
+            || (from == 'available'       && to == 'accepted')
+            || (from == 'accepted'        && to in ['going_to_pickup', 'available'])
+            || (from == 'going_to_pickup' && to in ['picked_up', 'available'])
+            || (from == 'picked_up'       && to == 'out_for_delivery')
+            || (from == 'out_for_delivery' && to == 'delivered')
+            || (from == 'delivered'       && to == 'completed');
+      }
+
       allow read: if isSignedIn();
       allow create: if isSignedIn();
-      // Volunteers claim and progress tasks; the assigned volunteer keeps it.
-      allow update: if isSignedIn() && (
-                      resource.data.volunteerId == null
-                      || resource.data.volunteerId == request.auth.uid
-                      || myRole() in ['ngo', 'requestor']
-                    );
+
+      // A volunteer may claim an unclaimed task or progress their own. An NGO
+      // can no longer seize a delivery another volunteer is already running.
+      allow update: if isSignedIn()
+                    && (
+                      (isUnclaimed() && myRole() == 'volunteer'
+                        && request.resource.data.volunteerId == request.auth.uid)
+                      || isAssigned()
+                    )
+                    && legalTaskTransition();
+
       allow delete: if false;
     }
 
     // --- Notifications -----------------------------------------------------
     match /notifications/{notificationId} {
       allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      // Anyone signed in could previously forge a notification addressed to
+      // anyone else, with arbitrary content.
+      //
+      // Cross-user notifications are legitimate here — a donor's acceptance
+      // notifies the receiver, a volunteer's pickup notifies the donor — so
+      // this cannot simply be locked to `self`. Instead the recipient must be
+      // a counterparty on a record the sender is actually part of, and the
+      // notification must be created unread so it cannot be backdated or
+      // pre-marked. Anything broader belongs in a Cloud Function using the
+      // admin SDK, which bypasses these rules.
+      function notifiesCounterparty() {
+        let target = request.resource.data.userId;
+        let donationId = request.resource.data.donationId;
+        let d = get(/databases/$(database)/documents/donations/$(donationId)).data;
+        return donationId != null
+               && (d.donorId == request.auth.uid
+                   || d.matchedReceiverId == request.auth.uid
+                   || d.assignedVolunteerId == request.auth.uid)
+               && (target == d.donorId
+                   || target == d.matchedReceiverId
+                   || target == d.assignedVolunteerId);
+      }
+
+      allow create: if isSignedIn()
+                    && request.resource.data.read == false
+                    && (request.resource.data.userId == request.auth.uid
+                        || notifiesCounterparty());
+
+      // Recipients flip `read`; they do not rewrite the content.
+      allow update: if isSignedIn()
+                    && resource.data.userId == request.auth.uid
+                    && changed().hasOnly(['read', 'readAt', 'updatedAt']);
+
       allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
   }

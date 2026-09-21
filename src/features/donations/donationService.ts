@@ -13,6 +13,7 @@ import type {
   UserProfile,
 } from '@/types';
 import { createDoc, getDocById, subscribeCollection, updateDocById, uid } from '@/services/db';
+import { assertDonationTransition } from './lifecycle';
 import { notify } from '@/features/notifications/notificationService';
 import { runMatchingForDonation } from '@/features/matching/matchService';
 import { DONATION_STATUS_LABEL, REQUEST_STATUS_LABEL, TASK_STATUS_LABEL } from '@/utils/labels';
@@ -65,6 +66,11 @@ export async function updateDonationStatus(
   status: DonationStatus,
   note?: string,
 ): Promise<void> {
+  // Guard every status write: a stale tab or a retry must not drive a donation
+  // backwards through its lifecycle. Throws InvalidTransitionError (§10).
+  assertDonationTransition(donation.status, status);
+  if (donation.status === status) return; // idempotent — nothing to record
+
   await updateDocById<Donation>('donations', donation.id, {
     status,
     timeline: appendEvent(donation, status, note),

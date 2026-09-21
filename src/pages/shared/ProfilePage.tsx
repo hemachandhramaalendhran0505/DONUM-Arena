@@ -21,6 +21,7 @@ import { Input, Select, Textarea } from '@/components/ui/Field';
 import { Badge, VerificationBadge } from '@/components/ui/Badge';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { enablePush, pushSupported } from '@/firebase/messaging';
+import { registerDeviceToken } from '@/features/auth/authService';
 import { resetDemoData } from '@/services/db';
 import { isFirebaseConfigured, backendMode } from '@/firebase/config';
 import { ROLE_LABEL, VEHICLE_LABEL } from '@/utils/labels';
@@ -73,12 +74,10 @@ export function ProfilePage() {
     const result = await enablePush();
     if (result.permission === 'granted') {
       // Persist the device token so the backend can actually reach this device.
-      // Without this the FCM registration is fetched and discarded.
+      // Appended atomically: this account may also be signed in on another
+      // device, and rewriting the whole array here would delete its token.
       if (result.token) {
-        const existing = user.fcmTokens ?? [];
-        if (!existing.includes(result.token)) {
-          await updateProfile({ fcmTokens: [...existing, result.token] });
-        }
+        await registerDeviceToken(user.id, result.token);
       }
       toast('Notifications enabled.');
     } else if (result.permission === 'denied') {

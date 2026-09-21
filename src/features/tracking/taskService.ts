@@ -8,6 +8,10 @@ import { getDocById, subscribeCollection, updateDocById } from '@/services/db';
 import { TASK_LIFECYCLE, TASK_STATUS_LABEL, DONATION_STATUS_LABEL } from '@/utils/labels';
 import { notify } from '@/features/notifications/notificationService';
 import { completeDonationFlow } from '@/features/donations/donationService';
+import {
+  assertTaskTransition,
+  canTransitionDonation,
+} from '@/features/donations/lifecycle';
 
 /** Donation status mirrored from each volunteer task transition. */
 const DONATION_STATUS_FOR_TASK: Partial<Record<TaskStatus, Donation['status']>> = {
@@ -32,6 +36,11 @@ export async function advanceTask(
   status: TaskStatus,
   volunteer: UserProfile,
 ): Promise<void> {
+  // Volunteer deliveries are strictly linear (§19): a task cannot jump from
+  // accepted straight to delivered, nor regress once handed over.
+  assertTaskTransition(task.status, status);
+  if (task.status === status) return; // idempotent re-tap of the same button
+
   await updateDocById<DeliveryTask>('tasks', task.id, {
     status,
     volunteerId: volunteer.id,
@@ -48,9 +57,11 @@ export async function advanceTask(
   if (donation && donationStatus && donation.status !== donationStatus) {
     if (donationStatus === 'completed') {
       await completeDonationFlow(donation.id);
-    } else {
+    } else if (canTransitionDonation(donation.status, donationStatus)) {
       await updateDocById<Donation>('donations', donation.id, {
         status: donationStatus,
+        // Lets security rules scope donation writes to this one volunteer.
+        assignedVolunteerId: volunteer.id,
         timeline: [
           ...donation.timeline,
           {
@@ -78,7 +89,14 @@ async function notifyForTransition(
 
   const send = async (userId: string | undefined, title: string, body: string) => {
     if (!userId) return;
-    await notify({ userId, title, body, kind: 'delivery', link: `/app/tasks/${task.id}` });
+    await notify({
+      userId,
+      title,
+      body,
+      kind: 'delivery',
+      link: `/app/tasks/${task.id}`,
+      donationId: task.donationId,
+    });
   };
 
   switch (status) {

@@ -18,7 +18,12 @@ import { acceptDonation } from '@/features/donations/donationService';
 import { createManualMatch } from '@/features/matching/matchService';
 import { CATEGORY_LABEL } from '@/utils/labels';
 import { roadDistanceKm } from '@/utils/geo';
-import { donationUrgency, URGENCY_RANK } from '@/utils/urgency';
+import {
+  applyBrowse,
+  type BrowseSort,
+  type ExpiryFilter,
+  type PickupWindow,
+} from '@/features/donations/browseFilters';
 import type { Donation, DonationCategory, Urgency } from '@/types';
 import { cn } from '@/utils/cn';
 
@@ -71,10 +76,10 @@ export function BrowseDonationsPage() {
   const [category, setCategory] = useState<DonationCategory | ''>('');
   const [maxDistance, setMaxDistance] = useState('0');
   const [minQuantity, setMinQuantity] = useState('');
-  const [expiry, setExpiry] = useState('any');
+  const [expiry, setExpiry] = useState<ExpiryFilter>('any');
   const [urgency, setUrgency] = useState<Urgency | ''>('');
-  const [pickupWindow, setPickupWindow] = useState('any');
-  const [sort, setSort] = useState('distance');
+  const [pickupWindow, setPickupWindow] = useState<PickupWindow>('any');
+  const [sort, setSort] = useState<BrowseSort>('distance');
   const [view, setView] = useState<'grid' | 'map'>('grid');
   const [showFilters, setShowFilters] = useState(false);
   const [requesting, setRequesting] = useState<Donation | null>(null);
@@ -98,59 +103,23 @@ export function BrowseDonationsPage() {
       }));
   }, [donations, user]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const now = Date.now();
-    const maxKm = Number(maxDistance);
-    const minQty = Number(minQuantity) || 0;
-
-    return withDistance
-      .filter(({ donation, distanceKm }) => {
-        if (q && !donation.title.toLowerCase().includes(q) && !donation.description.toLowerCase().includes(q))
-          return false;
-        if (category && donation.category !== category) return false;
-        if (maxKm > 0 && distanceKm > maxKm) return false;
-        if (minQty > 0 && donation.quantity < minQty) return false;
-
-        if (urgency) {
-          const rank = URGENCY_RANK[donationUrgency(donation, now)];
-          if (rank > URGENCY_RANK[urgency]) return false;
-        }
-
-        if (pickupWindow !== 'any') {
-          const days = { today: 1, tomorrow: 2, week: 7 }[pickupWindow] ?? 0;
-          const startOfToday = new Date(now).setHours(0, 0, 0, 0);
-          const limit = startOfToday + days * 864e5;
-          if (donation.pickupDate >= limit) return false;
-        }
-
-        if (expiry === 'none') return !donation.expiryDate;
-        if (expiry !== 'any') {
-          if (!donation.expiryDate) return false;
-          const hours = (donation.expiryDate - now) / 36e5;
-          if (hours < 0 || hours > Number(expiry)) return false;
-        }
-        return true;
-      })
-      .sort((a, b) => {
-        switch (sort) {
-          case 'urgency': {
-            const diff =
-              URGENCY_RANK[donationUrgency(a.donation, Date.now())] -
-              URGENCY_RANK[donationUrgency(b.donation, Date.now())];
-            return diff !== 0 ? diff : a.distanceKm - b.distanceKm;
-          }
-          case 'expiry':
-            return (a.donation.expiryDate ?? Infinity) - (b.donation.expiryDate ?? Infinity);
-          case 'quantity':
-            return b.donation.quantity - a.donation.quantity;
-          case 'newest':
-            return b.donation.createdAt - a.donation.createdAt;
-          default:
-            return a.distanceKm - b.distanceKm;
-        }
-      });
-  }, [withDistance, query, category, maxDistance, minQuantity, expiry, urgency, pickupWindow, sort]);
+  const filtered = useMemo(
+    () =>
+      applyBrowse(
+        withDistance,
+        {
+          query,
+          category,
+          maxDistanceKm: Number(maxDistance) || 0,
+          minQuantity: Number(minQuantity) || 0,
+          expiry,
+          urgency,
+          pickupWindow,
+        },
+        sort,
+      ),
+    [withDistance, query, category, maxDistance, minQuantity, expiry, urgency, pickupWindow, sort],
+  );
 
   const markers: MapMarker[] = useMemo(() => {
     const list: MapMarker[] = filtered.map(({ donation }) => ({
@@ -259,7 +228,7 @@ export function BrowseDonationsPage() {
           />
           <Select
             value={sort}
-            onChange={(e) => setSort(e.target.value)}
+            onChange={(e) => setSort(e.target.value as BrowseSort)}
             options={SORT_OPTIONS}
             wrapperClassName="sm:w-48"
           />
@@ -298,7 +267,7 @@ export function BrowseDonationsPage() {
               value={minQuantity}
               onChange={(e) => setMinQuantity(e.target.value)}
             />
-            <Select label="Expiry" value={expiry} onChange={(e) => setExpiry(e.target.value)} options={EXPIRY_OPTIONS} />
+            <Select label="Expiry" value={expiry} onChange={(e) => setExpiry(e.target.value as ExpiryFilter)} options={EXPIRY_OPTIONS} />
             <Select
               label="Urgency"
               value={urgency}
@@ -309,7 +278,7 @@ export function BrowseDonationsPage() {
             <Select
               label="Pickup date"
               value={pickupWindow}
-              onChange={(e) => setPickupWindow(e.target.value)}
+              onChange={(e) => setPickupWindow(e.target.value as PickupWindow)}
               options={DATE_OPTIONS}
             />
             {activeFilterCount > 0 && (
