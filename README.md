@@ -192,23 +192,43 @@ Rounded cards, soft shadows, clear status badges, Plus Jakarta Sans, and mobile-
 ## Testing
 
 ```bash
-npm test          # 18 unit + service-layer tests
+npm test            # 24 unit + service-layer tests
 npm run test:smoke  # 8 runtime smoke tests (mounts the real app)
 npm run test:all    # everything
 npm run typecheck   # tsc -b, zero errors
 npm run build       # production build
 ```
 
-**Unit & integration** (`vitest.config.ts`) — matching engine maths against every documented scoring band, and a full lifecycle test driving the real services: donation created → auto-matched → accepted → delivery task → all seven volunteer transitions → completed, asserting donation, request, task and notification state stay consistent.
+**Unit & integration** (`vitest.config.ts`) — matching engine maths against every documented scoring band, derived donation urgency, and a full lifecycle test driving the real services: donation created → auto-matched → accepted → delivery task → all seven volunteer transitions → completed, asserting donation, request, task and notification state stay consistent.
 
-**Runtime smoke** (`vitest.smoke.config.ts`) — mounts the actual application in jsdom, signs in as each of the four roles, walks every major route and **fails on any console error**. This caught two real defects during development: a same-tab session-notification bug that bounced users back to sign-in, and form labels not associated with their inputs.
+**Runtime smoke** (`vitest.smoke.config.ts`) — mounts the actual application in jsdom, signs in as each of the four roles, walks every major route and **fails on any console error**, plus asserts all six browse filters are present. This caught three real defects during development: a same-tab session-notification bug that bounced users back to sign-in, form labels not associated with their inputs, and FCM device tokens being fetched then silently discarded so push could never be delivered.
+
+---
+
+## Cloud Functions
+
+`functions/` contains the server-side half of the notification system and the
+maintenance that cannot depend on a browser tab being open:
+
+| Function | Trigger | Does |
+| --- | --- | --- |
+| `sendNotificationPush` | `onCreate notifications/{id}` | Fans the notification out to every device token on the user, and prunes tokens FCM reports as dead |
+| `expireStaleDonations` | hourly | Expires donations that passed their window while unclaimed |
+| `pickupReminders` | every 30 min | Reminds volunteers about pickups starting within the hour |
+
+```bash
+cd functions && npm install && npm run deploy
+```
+
+Device tokens are stored as `users/{id}.fcmTokens[]` — an array, so a user
+signed in on both phone and laptop is reached on both.
 
 ---
 
 ## Notes on scope
 
-- **Verification workflow** — status (`pending` / `verified` / `rejected`) is modelled, enforced in rules and surfaced throughout the UI. Admin review tooling to *change* that status is intentionally out of scope; in production it belongs behind an admin console or Cloud Function.
-- **Push delivery** — FCM registration, the service worker and the notification pipeline are wired. Actual server-side fan-out needs a Cloud Function trigger on `notifications/`; in local mode DONUM uses the browser's Notification API so the experience is real.
+- **Verification workflow** — status (`pending` / `verified` / `rejected`) is modelled, enforced in rules and surfaced throughout the UI. Admin review tooling to *change* that status is intentionally out of scope; in production it belongs behind an admin console with custom claims.
+- **Donation urgency is derived, not entered.** Requests carry an explicit urgency set by the requestor; a donation's urgency is computed from real time pressure (expiry + pickup window) in `src/utils/urgency.ts`, so NGOs can triage the browse list without donors having to self-report priority.
 - **Geocoding** — addresses are entered as text with coordinates from device geolocation. Dropping in the Places Autocomplete widget is a small addition wherever `VITE_GOOGLE_MAPS_API_KEY` is available.
 
 ---

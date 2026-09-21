@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
 import { Clock, MapPin, Package2 } from 'lucide-react';
 import type { Donation } from '@/types';
-import { Badge, StatusBadge, VerificationBadge } from '@/components/ui/Badge';
+import { Badge, StatusBadge, UrgencyBadge, VerificationBadge } from '@/components/ui/Badge';
 import { CATEGORY_EMOJI, CATEGORY_LABEL } from '@/utils/labels';
 import { countdown, isExpiringSoon, relativeTime } from '@/utils/format';
+import { donationUrgency } from '@/utils/urgency';
 import { formatDistance } from '@/utils/geo';
 import { cn } from '@/utils/cn';
 
@@ -14,6 +15,8 @@ interface DonationCardProps {
   footer?: React.ReactNode;
   matchScore?: number;
   className?: string;
+  /** Show the derived time-pressure badge (used on NGO browse/triage views). */
+  showUrgency?: boolean;
 }
 
 export function DonationCard({
@@ -23,9 +26,11 @@ export function DonationCard({
   footer,
   matchScore,
   className,
+  showUrgency,
 }: DonationCardProps) {
   const expiring = isExpiringSoon(donation.expiryDate, 24);
   const image = donation.images[0];
+  const urgency = donationUrgency(donation);
 
   const body = (
     <>
@@ -71,6 +76,7 @@ export function DonationCard({
       </div>
 
       <div className="mt-3.5 flex flex-wrap items-center gap-2">
+        {showUrgency && <UrgencyBadge urgency={urgency} />}
         {donation.expiryDate && (
           <Badge tone={expiring ? 'danger' : 'muted'}>{countdown(donation.expiryDate)}</Badge>
         )}

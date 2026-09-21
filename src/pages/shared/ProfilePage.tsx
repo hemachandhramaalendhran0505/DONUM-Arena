@@ -72,7 +72,14 @@ export function ProfilePage() {
   const turnOnPush = async () => {
     const result = await enablePush();
     if (result.permission === 'granted') {
-      if (result.token) await updateProfile({ updatedAt: Date.now() });
+      // Persist the device token so the backend can actually reach this device.
+      // Without this the FCM registration is fetched and discarded.
+      if (result.token) {
+        const existing = user.fcmTokens ?? [];
+        if (!existing.includes(result.token)) {
+          await updateProfile({ fcmTokens: [...existing, result.token] });
+        }
+      }
       toast('Notifications enabled.');
     } else if (result.permission === 'denied') {
       toast('Notification permission was declined in your browser.', 'error');

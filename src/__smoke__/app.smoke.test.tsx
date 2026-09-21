@@ -207,7 +207,15 @@ describe('DONUM application smoke', () => {
     const ngoNav = screen.getAllByRole('navigation')[0];
     await session.click(within(ngoNav).getByRole('link', { name: /Browse Donations/i }));
     expect(await screen.findByRole('heading', { name: /browse donations/i })).toBeTruthy();
-    expect(screen.getByText(/Filters/i)).toBeTruthy();
+
+    // All six filters required by the spec must be reachable (§11).
+    await session.click(screen.getByRole('button', { name: /Filters/i }));
+    const main = screen.getByRole('main');
+    ['Category', 'Distance', 'Minimum quantity', 'Expiry', 'Urgency', 'Pickup date'].forEach(
+      (label) => {
+        expect(within(main).getByText(label), `missing filter: ${label}`).toBeTruthy();
+      },
+    );
     expectNoErrors('browse donations');
 
     await session.click(within(ngoNav).getByRole('link', { name: /^Requests$/i }));

@@ -49,6 +49,12 @@ export interface UserProfile {
 
   onboardingComplete?: boolean;
   locationPermission?: boolean;
+  /**
+   * FCM registration tokens, one per device/browser the user has enabled push
+   * on. Stored as an array so a user signed in on phone and laptop receives
+   * notifications on both; stale tokens are pruned on send failure.
+   */
+  fcmTokens?: string[];
   createdAt: number;
   updatedAt: number;
 }

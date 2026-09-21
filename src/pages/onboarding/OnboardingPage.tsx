@@ -152,13 +152,21 @@ export function OnboardingPage() {
       position = await geo.request();
       setCoords(position);
     }
+    // Request push alongside location, and persist the device token so the
+    // backend can actually reach this device later.
+    let fcmTokens: string[] | undefined;
+    if (withLocation) {
+      const push = await enablePush();
+      if (push.token) fcmTokens = [push.token];
+    }
+
     await updateProfile({
       latitude: position?.latitude ?? 0,
       longitude: position?.longitude ?? 0,
       locationPermission: withLocation,
       onboardingComplete: true,
+      ...(fcmTokens && { fcmTokens }),
     });
-    if (withLocation) void enablePush();
     setLoading(false);
     toast('You’re all set. Welcome to DONUM.');
     navigate('/app');
