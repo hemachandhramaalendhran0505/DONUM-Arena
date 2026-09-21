@@ -11,9 +11,11 @@ import {
   EMPTY_FILTERS,
   activeFilterCount,
   applyBrowse,
+  type BrowseFilters,
   type ScopedDonation,
 } from '@/features/donations/browseFilters';
 import type { Donation } from '@/types';
+import { URGENCY_RANK, donationUrgency } from '@/utils/urgency';
 
 const NOW = new Date('2026-03-10T09:00:00Z').getTime();
 const HOUR = 36e5;
@@ -165,10 +167,56 @@ describe('browse filters change the result set', () => {
   });
 });
 
+describe('clearing a filter restores the dataset (§15)', () => {
+  it('round-trips: full set -> filtered -> full set again', () => {
+    const full = applyBrowse(ITEMS, EMPTY_FILTERS, 'distance', NOW);
+    expect(full).toHaveLength(4);
+
+    const narrowed = applyBrowse(ITEMS, { ...EMPTY_FILTERS, category: 'clothes' }, 'distance', NOW);
+    expect(narrowed).toHaveLength(1);
+
+    // Resetting to the empty filter set must return exactly the original rows,
+    // in the same order — no state left behind by the previous filter.
+    const restored = applyBrowse(ITEMS, EMPTY_FILTERS, 'distance', NOW);
+    expect(ids(restored)).toEqual(ids(full));
+  });
+
+  it('restores the dataset after every single filter is cleared in turn', () => {
+    const baseline = ids(applyBrowse(ITEMS, EMPTY_FILTERS, 'distance', NOW));
+    const each: BrowseFilters[] = [
+      { ...EMPTY_FILTERS, category: 'groceries' },
+      { ...EMPTY_FILTERS, maxDistanceKm: 2 },
+      { ...EMPTY_FILTERS, minQuantity: 45 },
+      { ...EMPTY_FILTERS, urgency: 'critical' },
+      { ...EMPTY_FILTERS, expiry: '12' },
+      { ...EMPTY_FILTERS, pickupWindow: 'today' },
+    ];
+    for (const filters of each) {
+      const narrowed = applyBrowse(ITEMS, filters, 'distance', NOW);
+      expect(narrowed.length).toBeLessThan(baseline.length);
+      expect(ids(applyBrowse(ITEMS, EMPTY_FILTERS, 'distance', NOW))).toEqual(baseline);
+    }
+  });
+});
+
 describe('browse sorting', () => {
   it('orders most urgent first, breaking ties by distance', () => {
     const out = applyBrowse(ITEMS, EMPTY_FILTERS, 'urgency', NOW);
     expect(out[0].donation.id).toBe('d_urgent_food');
+  });
+
+  it('"most urgent first" genuinely changes the ordering', () => {
+    // Asserting the first element alone would pass even if the sort were a
+    // no-op, because the most urgent item is also the nearest in this fixture.
+    const byQuantity = ids(applyBrowse(ITEMS, EMPTY_FILTERS, 'quantity', NOW));
+    const byUrgency = ids(applyBrowse(ITEMS, EMPTY_FILTERS, 'urgency', NOW));
+    expect(byUrgency).not.toEqual(byQuantity);
+
+    // And the ordering must be non-increasing in urgency rank.
+    const ranks = applyBrowse(ITEMS, EMPTY_FILTERS, 'urgency', NOW).map(
+      (i) => URGENCY_RANK[donationUrgency(i.donation, NOW)],
+    );
+    expect([...ranks]).toEqual([...ranks].sort((a, b) => a - b));
   });
 
   it('orders by distance, expiry, quantity and recency', () => {

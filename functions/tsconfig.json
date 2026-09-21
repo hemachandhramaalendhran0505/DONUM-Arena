@@ -2,7 +2,9 @@
   "compilerOptions": {
     "module": "commonjs",
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "moduleResolution": "node",
     "noImplicitReturns": true,
     "noUnusedLocals": true,
@@ -12,5 +14,12 @@
     "skipLibCheck": true
   },
   "compileOnSave": true,
-  "include": ["src"]
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "src/__tests__",
+    "lib",
+    "node_modules"
+  ]
 }

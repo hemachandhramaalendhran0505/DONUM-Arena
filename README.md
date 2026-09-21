@@ -206,11 +206,22 @@ Rounded cards, soft shadows, clear status badges, Plus Jakarta Sans, and mobile-
 ## Testing
 
 ```bash
-npm test            # 111 unit, service, security and architecture tests
+npm test            # 132 unit, service, security and architecture tests
 npm run test:smoke  # 8 runtime smoke tests (mounts the real app)
 npm run test:all    # everything
 npm run typecheck   # tsc -b, zero errors
 npm run build       # production build
+
+cd functions
+npm test            # 19 tests that execute the Cloud Function handlers
+npm run typecheck   # deploy build + test sources
+npm run build       # emits lib/, excluding tests
+```
+
+To exercise the Auth and Functions emulators locally (no Java needed):
+
+```bash
+firebase emulators:start --only auth,functions --project demo-donum
 ```
 
 **Unit & integration** (`vitest.config.ts`) — 111 tests covering the matching
@@ -269,29 +280,44 @@ twice.
 
 ## Verified, and not verified
 
-Being precise about this matters more than a green checkmark:
+Being precise about this matters more than a green checkmark. "Verified" below
+means a command was executed and its result observed — not that the code was
+read and looked right.
 
-| Area | How it is verified |
-| --- | --- |
-| Matching, urgency, filters, lifecycles, geo, uploads | Unit tests against real data |
-| Service integration | Lifecycle test driving the real services over the local store |
-| App boots and every route renders | Runtime smoke tests, failing on any console error |
-| Firestore rules | **Static analysis only** — see below |
-| Cloud Functions | Pure logic unit-tested; triggers typecheck and compile |
-| Firebase backend end to end | **Not verified here** — needs project credentials |
+| Area | Status | How |
+| --- | --- | --- |
+| Matching, urgency, filters, lifecycles, geo, uploads | **Verified** | 132 unit/integration tests |
+| Cloud Function handlers | **Verified** | 19 tests that execute the real handler bodies |
+| Firebase Authentication | **Verified** | Executed against the Auth emulator: register, login, logout, wrong-password and duplicate-email rejection |
+| Functions load as deployable | **Verified** | Functions emulator loaded all three definitions from source |
+| App boots, all four roles, every route | **Verified** | 8 runtime smoke tests, failing on any console error |
+| Architecture boundaries | **Verified** | Guard proven to fail on three injected violations, then restored |
+| Firestore security rules | *Statically verified* | Parsed and asserted; **not executed** |
+| Firestore queries / indexes | *Statically verified* | Declared and reviewed; **not executed** against Firestore |
+| Storage rules | *Statically verified* | Client-side validation is tested; server rules are not executed |
+| Google Sign-In | **Not verified** | Requires a real project and a browser OAuth flow |
+| Deployment | **Not attempted** | No credentials in this environment |
 
-`src/services/securityRules.test.ts` parses `firestore.rules` and asserts the
-specific holes found in the audit stay closed. That is not the same as
-behavioural verification: the proper tool is `@firebase/rules-unit-testing`
-against the emulator, which needs firebase v12 (this project is on v10) and a
-JVM, neither available in this environment. Before going live, run the rules
-against the emulator suite.
+### Why the rules are not executed
 
-Equally, the Cloud Functions compile and their logic is tested, but they have
-not been executed against a live project. `firebase emulators:start` will
-exercise them once credentials exist.
+The Firestore, Storage and Pub/Sub emulators are Java binaries. Java cannot be
+installed here: the Debian mirror, the Oracle download host and the GitHub
+release CDN are all blocked from this sandbox, and building a JRE from npm
+fails. This was established by running the emulator, not assumed:
 
----
+```
+Error: Could not spawn `java -version`. Please make sure Java is installed
+```
+
+`@firebase/rules-unit-testing` is also incompatible — it requires firebase v12
+and this project is on v10 — and it needs that same emulator regardless.
+
+**Before going live, run the rules against the emulator on a machine with Java.**
+`firebase.json` is already configured for it (`firebase emulators:start`), and
+the rules test file documents each behaviour that then needs asserting.
+
+The Auth and Functions emulators are pure Node, which is why those two *were*
+executed here.
 
 ## Notes on scope
 
