@@ -7,7 +7,7 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { useGeolocation } from '@/hooks/useGeolocation';
-import { createRequest } from '@/services/requestService';
+import { createRequest } from '@/features/requests/requestService';
 import { CATEGORY_EMOJI, CATEGORY_LABEL, UNITS_BY_CATEGORY, URGENCY_LABEL } from '@/utils/labels';
 import type { DonationCategory, Urgency } from '@/types';
 import { toDateInput } from '@/utils/format';

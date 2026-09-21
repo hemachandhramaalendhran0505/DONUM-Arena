@@ -1,5 +1,5 @@
 import type { AppNotification, NotificationKind } from '@/types';
-import { createDoc, subscribeCollection, updateDocById, listDocs } from './db';
+import { createDoc, subscribeCollection, updateDocById, listDocs } from '@/services/db';
 import { showLocalNotification } from '@/firebase/messaging';
 import { isFirebaseConfigured } from '@/firebase/config';
 

@@ -28,7 +28,7 @@ import { Input, Select, Textarea } from '@/components/ui/Field';
 import { Logo } from '@/components/common/Logo';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { AuthError } from '@/services/authService';
+import { AuthError } from '@/features/auth/authService';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { enablePush } from '@/firebase/messaging';
 import type { UserRole } from '@/types';

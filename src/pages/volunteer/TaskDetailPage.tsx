@@ -20,7 +20,7 @@ import { TaskStatusBadge } from '@/components/ui/Badge';
 import { Timeline } from '@/components/common/Timeline';
 import { MapView, MapLegend } from '@/components/map/MapView';
 import { useToast } from '@/context/ToastContext';
-import { advanceTask, nextStatus } from '@/services/taskService';
+import { advanceTask, nextStatus } from '@/features/tracking/taskService';
 import { TASK_LIFECYCLE, TASK_STATUS_LABEL, CATEGORY_LABEL } from '@/utils/labels';
 import { formatDateTime } from '@/utils/format';
 import { formatDistance } from '@/utils/geo';

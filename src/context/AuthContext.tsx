@@ -15,7 +15,7 @@ import {
   signOut as authSignOut,
   signUp as authSignUp,
   updateUserProfile,
-} from '@/services/authService';
+} from '@/features/auth/authService';
 import { ensureSeeded } from '@/services/db';
 
 interface AuthContextValue {

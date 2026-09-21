@@ -11,8 +11,8 @@ import { MapView, MapLegend } from '@/components/map/MapView';
 import { MatchExplanation } from '@/features/matching/MatchExplanation';
 import { DonationCard } from '@/components/common/DonationCard';
 import { useToast } from '@/context/ToastContext';
-import { cancelRequest } from '@/services/requestService';
-import { createManualMatch } from '@/services/matchService';
+import { cancelRequest } from '@/features/requests/requestService';
+import { createManualMatch } from '@/features/matching/matchService';
 import { rankDonationsForRequest, type RankedMatch } from '@/features/matching/engine';
 import {
   CATEGORY_EMOJI,

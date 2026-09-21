@@ -8,9 +8,9 @@
 import { isFirebaseConfigured } from '@/firebase/config';
 import { getFirebaseAuth } from '@/firebase/app';
 import type { SignUpPayload, UserProfile, UserRole } from '@/types';
-import { createDoc, ensureSeeded, getDocById, updateDocById, uid } from './db';
-import { localStore } from './localStore';
-import type { StoredCredential } from './seed';
+import { createDoc, ensureSeeded, getDocById, updateDocById, uid } from '@/services/db';
+import { localStore } from '@/services/localStore';
+import type { StoredCredential } from '@/services/seed';
 
 const SESSION_KEY = 'donum.session.uid';
 

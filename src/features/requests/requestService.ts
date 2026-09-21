@@ -3,10 +3,10 @@
  * created → searching → matched → fulfilled → completed
  */
 import type { ResourceRequest, RequestStatus, UserProfile } from '@/types';
-import { createDoc, subscribeCollection, updateDocById, uid } from './db';
+import { createDoc, subscribeCollection, updateDocById, uid } from '@/services/db';
 import { REQUEST_STATUS_LABEL } from '@/utils/labels';
-import { previewMatchesForRequest } from './matchService';
-import { notify } from './notificationService';
+import { previewMatchesForRequest } from '@/features/matching/matchService';
+import { notify } from '@/features/notifications/notificationService';
 
 export type NewRequestInput = Omit<
   ResourceRequest,

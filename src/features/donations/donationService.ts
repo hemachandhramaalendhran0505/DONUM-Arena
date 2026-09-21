@@ -12,9 +12,9 @@ import type {
   StatusEvent,
   UserProfile,
 } from '@/types';
-import { createDoc, getDocById, subscribeCollection, updateDocById, uid } from './db';
-import { notify } from './notificationService';
-import { runMatchingForDonation } from './matchService';
+import { createDoc, getDocById, subscribeCollection, updateDocById, uid } from '@/services/db';
+import { notify } from '@/features/notifications/notificationService';
+import { runMatchingForDonation } from '@/features/matching/matchService';
 import { DONATION_STATUS_LABEL, REQUEST_STATUS_LABEL, TASK_STATUS_LABEL } from '@/utils/labels';
 import { estimateMinutes, roadDistanceKm } from '@/utils/geo';
 

@@ -24,8 +24,8 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { useGeolocation } from '@/hooks/useGeolocation';
-import { createDonation } from '@/services/donationService';
-import { previewMatchesForDonation } from '@/services/matchService';
+import { createDonation } from '@/features/donations/donationService';
+import { previewMatchesForDonation } from '@/features/matching/matchService';
 import { uploadImages } from '@/firebase/storage';
 import type { Donation, DonationCategory, DonationCondition, FoodDetails } from '@/types';
 import {

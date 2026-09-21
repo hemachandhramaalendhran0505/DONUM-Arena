@@ -10,7 +10,7 @@ import { TaskStatusBadge } from '@/components/ui/Badge';
 import { MapView } from '@/components/map/MapView';
 import { greeting, relativeTime } from '@/utils/format';
 import { formatDistance } from '@/utils/geo';
-import { acceptTask } from '@/services/taskService';
+import { acceptTask } from '@/features/tracking/taskService';
 import { useToast } from '@/context/ToastContext';
 import { CATEGORY_LABEL } from '@/utils/labels';
 import type { DeliveryTask } from '@/types';

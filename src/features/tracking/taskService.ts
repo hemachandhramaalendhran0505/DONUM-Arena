@@ -4,10 +4,10 @@
  *           → delivered → completed
  */
 import type { DeliveryTask, Donation, TaskStatus, UserProfile } from '@/types';
-import { getDocById, subscribeCollection, updateDocById } from './db';
+import { getDocById, subscribeCollection, updateDocById } from '@/services/db';
 import { TASK_LIFECYCLE, TASK_STATUS_LABEL, DONATION_STATUS_LABEL } from '@/utils/labels';
-import { notify } from './notificationService';
-import { completeDonationFlow } from './donationService';
+import { notify } from '@/features/notifications/notificationService';
+import { completeDonationFlow } from '@/features/donations/donationService';
 
 /** Donation status mirrored from each volunteer task transition. */
 const DONATION_STATUS_FOR_TASK: Partial<Record<TaskStatus, Donation['status']>> = {

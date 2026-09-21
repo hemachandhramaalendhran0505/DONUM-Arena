@@ -22,7 +22,7 @@ import { buildImpactSummary, buildRequestStats } from '@/features/analytics/impa
 import { greeting, relativeTime } from '@/utils/format';
 import { roadDistanceKm } from '@/utils/geo';
 import { rankDonationsForRequest } from '@/features/matching/engine';
-import { acceptDonation } from '@/services/donationService';
+import { acceptDonation } from '@/features/donations/donationService';
 import { useToast } from '@/context/ToastContext';
 
 const OPEN = new Set(['created', 'matching', 'matched']);

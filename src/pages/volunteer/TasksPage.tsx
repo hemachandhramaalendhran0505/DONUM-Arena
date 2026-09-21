@@ -6,7 +6,7 @@ import { useData } from '@/context/DataContext';
 import { Card, EmptyState } from '@/components/ui/Card';
 import { Button, LinkButton } from '@/components/ui/Button';
 import { TaskStatusBadge } from '@/components/ui/Badge';
-import { acceptTask } from '@/services/taskService';
+import { acceptTask } from '@/features/tracking/taskService';
 import { useToast } from '@/context/ToastContext';
 import { formatDistance } from '@/utils/geo';
 import { relativeTime } from '@/utils/format';

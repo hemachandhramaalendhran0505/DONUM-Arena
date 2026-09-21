@@ -25,7 +25,7 @@ import { MapView, MapLegend } from '@/components/map/MapView';
 import { MatchExplanation } from '@/features/matching/MatchExplanation';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/context/ToastContext';
-import { acceptDonation, cancelDonation, rejectDonation } from '@/services/donationService';
+import { acceptDonation, cancelDonation, rejectDonation } from '@/features/donations/donationService';
 import {
   CATEGORY_EMOJI,
   CATEGORY_LABEL,

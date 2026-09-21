@@ -103,20 +103,34 @@ Headline metrics (donations, people reached, resources distributed, volunteer ho
 src/
 ├── components/      ui/ · common/ · charts/ · map/
 ├── context/         AuthContext · DataContext · ToastContext
-├── features/
-│   ├── matching/    engine.ts (+ tests) · MatchExplanation.tsx
-│   └── analytics/   impact.ts
+├── features/        one folder per domain capability
+│   ├── auth/            authService.ts
+│   ├── donations/       donationService.ts (+ lifecycle.test.ts)
+│   ├── requests/        requestService.ts
+│   ├── matching/        engine.ts (+ engine.test.ts) · matchService.ts
+│   │                    MatchExplanation.tsx
+│   ├── tracking/        taskService.ts (volunteer delivery state machine)
+│   ├── notifications/   notificationService.ts
+│   └── analytics/       impact.ts
 ├── firebase/        config · app · storage · messaging
 ├── hooks/           useCountUp · useGeolocation · useGoogleMaps
 ├── layouts/         AppLayout (role-aware nav) · PublicLayout
 ├── pages/           donor/ · ngo/ · volunteer/ · requestor/ · requests/
 │                    shared/ · auth/ · onboarding/ · LandingPage
-├── services/        db · authService · donationService · requestService
-│                    matchService · taskService · notificationService
-│                    localStore · seed
+├── services/        infrastructure only — db · localStore · seed
 ├── types/           shared domain model
-└── utils/           geo · format · labels · cn
+└── utils/           geo · format · labels · urgency · cn
 ```
+
+`features/` holds domain logic and `services/` holds the infrastructure it runs
+on: `db.ts` is the storage port, `localStore.ts` its browser adapter, `seed.ts`
+the demo dataset. The storage layer never imports a feature, so each capability
+can be read, tested, or replaced on its own — an invariant enforced by a test
+(`src/services/architecture.test.ts`) rather than left to good intentions.
+
+`seed.ts` is the deliberate exception: it calls the real matching engine, so the
+scores shown on demo data are genuinely computed rather than hand-written
+numbers that would drift the moment the weights changed.
 
 ### The dual-backend design
 
@@ -192,14 +206,14 @@ Rounded cards, soft shadows, clear status badges, Plus Jakarta Sans, and mobile-
 ## Testing
 
 ```bash
-npm test            # 24 unit + service-layer tests
+npm test            # 27 unit, service-layer and architecture tests
 npm run test:smoke  # 8 runtime smoke tests (mounts the real app)
 npm run test:all    # everything
 npm run typecheck   # tsc -b, zero errors
 npm run build       # production build
 ```
 
-**Unit & integration** (`vitest.config.ts`) — matching engine maths against every documented scoring band, derived donation urgency, and a full lifecycle test driving the real services: donation created → auto-matched → accepted → delivery task → all seven volunteer transitions → completed, asserting donation, request, task and notification state stay consistent.
+**Unit & integration** (`vitest.config.ts`) — matching engine maths against every documented scoring band, derived donation urgency, an architecture guard that fails the build if the storage layer imports a feature, and a full lifecycle test driving the real services: donation created → auto-matched → accepted → delivery task → all seven volunteer transitions → completed, asserting donation, request, task and notification state stay consistent.
 
 **Runtime smoke** (`vitest.smoke.config.ts`) — mounts the actual application in jsdom, signs in as each of the four roles, walks every major route and **fails on any console error**, plus asserts all six browse filters are present. This caught three real defects during development: a same-tab session-notification bug that bounced users back to sign-in, form labels not associated with their inputs, and FCM device tokens being fetched then silently discarded so push could never be delivered.
 

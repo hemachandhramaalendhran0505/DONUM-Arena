@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, BellRing, CheckCheck, Handshake, PackageCheck, Siren, Truck } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
-import { markAllRead, markRead } from '@/services/notificationService';
+import { markAllRead, markRead } from '@/features/notifications/notificationService';
 import { relativeTime } from '@/utils/format';
 import { cn } from '@/utils/cn';
 import type { NotificationKind } from '@/types';

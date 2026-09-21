@@ -7,12 +7,12 @@
  */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { AppNotification, DeliveryTask, Donation, Match, ResourceRequest, UserProfile } from '@/types';
-import { subscribeDonations, expireStaleDonations } from '@/services/donationService';
-import { subscribeRequests } from '@/services/requestService';
-import { subscribeTasks } from '@/services/taskService';
-import { subscribeMatches } from '@/services/matchService';
+import { subscribeDonations, expireStaleDonations } from '@/features/donations/donationService';
+import { subscribeRequests } from '@/features/requests/requestService';
+import { subscribeTasks } from '@/features/tracking/taskService';
+import { subscribeMatches } from '@/features/matching/matchService';
 import { subscribeCollection } from '@/services/db';
-import { subscribeNotifications } from '@/services/notificationService';
+import { subscribeNotifications } from '@/features/notifications/notificationService';
 import { useAuth } from './AuthContext';
 
 interface DataContextValue {

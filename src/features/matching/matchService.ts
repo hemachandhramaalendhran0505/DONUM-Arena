@@ -6,9 +6,9 @@
  * lifecycles and notifies everyone involved.
  */
 import type { Donation, Match, ResourceRequest, MatchingWeights } from '@/types';
-import { rankRequestsForDonation, rankDonationsForRequest, type RankedMatch } from '@/features/matching/engine';
-import { createDoc, listDocs, subscribeCollection, updateDocById, uid } from './db';
-import { notify } from './notificationService';
+import { rankRequestsForDonation, rankDonationsForRequest, type RankedMatch } from './engine';
+import { createDoc, listDocs, subscribeCollection, updateDocById, uid } from '@/services/db';
+import { notify } from '@/features/notifications/notificationService';
 import { DONATION_STATUS_LABEL, REQUEST_STATUS_LABEL } from '@/utils/labels';
 
 export interface MatchContext {

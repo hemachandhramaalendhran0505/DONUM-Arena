@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/Field';
 import { Logo } from '@/components/common/Logo';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { AuthError } from '@/services/authService';
+import { AuthError } from '@/features/auth/authService';
 import { DEMO_ACCOUNTS } from '@/services/seed';
 import { isFirebaseConfigured } from '@/firebase/config';
 import { AuthAside } from './AuthAside';

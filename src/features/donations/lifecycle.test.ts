@@ -7,11 +7,11 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { AppNotification, DeliveryTask, Donation, Match, ResourceRequest, UserProfile } from '@/types';
-import { localStore } from './localStore';
-import { listDocs, getDocById, ensureSeeded } from './db';
-import { createDonation, acceptDonation } from './donationService';
-import { createRequest } from './requestService';
-import { advanceTask } from './taskService';
+import { localStore } from '@/services/localStore';
+import { listDocs, getDocById, ensureSeeded } from '@/services/db';
+import { createDonation, acceptDonation } from '@/features/donations/donationService';
+import { createRequest } from '@/features/requests/requestService';
+import { advanceTask } from '@/features/tracking/taskService';
 import { TASK_LIFECYCLE } from '@/utils/labels';
 
 const HOUR = 36e5;
