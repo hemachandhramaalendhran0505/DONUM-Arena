@@ -1,0 +1,31 @@
+rules_version = '2';
+
+/**
+ * DONUM — Cloud Storage rules.
+ * Donation images are publicly readable (they appear on donation cards) but
+ * only the owning donor may write, and uploads are size/type constrained.
+ */
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    match /donations/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    match /profiles/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.size < 2 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

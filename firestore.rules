@@ -1,0 +1,108 @@
+rules_version = '2';
+
+/**
+ * DONUM — Firestore security rules.
+ *
+ * Principles:
+ *  - Everyone signed in can discover open donations and requests (that is the
+ *    whole point of the platform), but only the owner can mutate their records.
+ *  - Sensitive profile fields are never world-writable.
+ *  - Notifications are strictly private to their recipient.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function roleOf(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    }
+
+    function myRole() {
+      return roleOf(request.auth.uid);
+    }
+
+    // --- Users -------------------------------------------------------------
+    match /users/{userId} {
+      // Profiles are readable by signed-in users so names, verification badges
+      // and approximate locations can be displayed on cards.
+      allow read: if isSignedIn();
+      allow create: if isSelf(userId);
+      // A user may never self-approve their own verification status.
+      allow update: if isSelf(userId)
+                    && request.resource.data.verificationStatus == resource.data.verificationStatus
+                    && request.resource.data.role == resource.data.role;
+      allow delete: if false;
+    }
+
+    // --- Donations ---------------------------------------------------------
+    match /donations/{donationId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+                    && request.resource.data.donorId == request.auth.uid;
+      // The donor owns the record; the matched receiver and the assigned
+      // volunteer may advance its status.
+      allow update: if isSignedIn() && (
+                      resource.data.donorId == request.auth.uid
+                      || resource.data.matchedReceiverId == request.auth.uid
+                      || myRole() == 'volunteer'
+                    );
+      allow delete: if isSignedIn() && resource.data.donorId == request.auth.uid;
+    }
+
+    // --- Resource requests -------------------------------------------------
+    match /requests/{requestId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+                    && request.resource.data.requestorId == request.auth.uid
+                    && myRole() in ['ngo', 'requestor'];
+      allow update: if isSignedIn() && (
+                      resource.data.requestorId == request.auth.uid
+                      // Donors fulfilling this request update its progress.
+                      || request.resource.data.diff(resource.data).affectedKeys()
+                           .hasOnly(['fulfilledQuantity', 'status', 'timeline', 'matchedDonationIds', 'updatedAt'])
+                    );
+      allow delete: if isSignedIn() && resource.data.requestorId == request.auth.uid;
+    }
+
+    // --- Matches -----------------------------------------------------------
+    match /matches/{matchId} {
+      allow read: if isSignedIn();
+      // Written by the matching engine (client or Cloud Function) on behalf of
+      // one of the two parties.
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+                      resource.data.donorId == request.auth.uid
+                      || resource.data.receiverId == request.auth.uid
+                    );
+      allow delete: if false;
+    }
+
+    // --- Delivery tasks ----------------------------------------------------
+    match /tasks/{taskId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      // Volunteers claim and progress tasks; the assigned volunteer keeps it.
+      allow update: if isSignedIn() && (
+                      resource.data.volunteerId == null
+                      || resource.data.volunteerId == request.auth.uid
+                      || myRole() in ['ngo', 'requestor']
+                    );
+      allow delete: if false;
+    }
+
+    // --- Notifications -----------------------------------------------------
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}
